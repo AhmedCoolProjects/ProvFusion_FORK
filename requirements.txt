@@ -37,6 +37,8 @@ tensorboardX==2.6.2.2
 pytz==2024.1
 xxhash==3.2.0
 
+# Optional: only needed for opt-in experiment tracking (`--wandb`)
+# wandb>=0.17
 # Data-preparation pipeline only (raw DARPA logs -> embeddings; not needed for training-only use)
 gensim==4.3.1
 psycopg2==2.9.9

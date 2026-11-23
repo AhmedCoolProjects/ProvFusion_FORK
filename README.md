@@ -238,8 +238,21 @@ CUDA_VISIBLE_DEVICES=0 python main_transductive.py --device 0 \
   --num_layers 2 --lr 0.0015 --weight_decay 0.001 --lr_f 0.001 --weight_decay_f 0.0001 \
   --max_epoch 200 --max_epoch_f 50 --in_drop 0.2 --attn_drop 0.1 --drop_edge_rate 0.0 \
   --loss_fn sce --optimizer adam --alpha_l 3 --replace_rate 0.0 --activation prelu \
-  --linear_prob --scheduler --use_cfg --seeds 1 --normalization_method percentile
 ```
+
+Training and standalone evaluation both accept opt-in W&B logging (off by default):
+
+```bash
+# one-time: pip install wandb; wandb login   (or WANDB_MODE=offline for no-network runs)
+python main_transductive.py --dataset CLEARSCOPE_E3 --data_path ... --ground_truth_path ... \
+  --wandb --wandb_run_name clearscope-e3-baseline --wandb_mode offline
+python try_different_threshold.py --results_path ... --data_path ... --ground_truth_path ... \
+  --wandb --wandb_run_name clearscope-e3-eval --wandb_mode offline
+```
+
+Logged metrics: per-epoch `attribute/*` and `structure/*` GraphMAE losses,
+`finetune/train_loss`, and final `eval/*` detection metrics (TP/FP/FN/TN,
+precision/recall/F1/accuracy/MCC/ADP).
 
 Substitute the data paths and hyperparameters per dataset (see
 [Best hyperparameters](#-best-hyperparameters)). Training prints the full evaluation (all

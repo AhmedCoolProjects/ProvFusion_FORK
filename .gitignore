@@ -41,9 +41,8 @@ build/
 
 # Environments
 .env
+.env.local
 .venv/
-venv/
-
 # IDEs
 .idea/
 .vscode/
@@ -55,5 +54,7 @@ venv/
 # Server-specific real config (never commit)
 data_preparation/local_config.json
 
-# Release binaries are distributed via Hugging Face, not git
 release_assets/
+.data/
+# W&B local run directories (offline runs sync later via `wandb sync`)
+wandb/

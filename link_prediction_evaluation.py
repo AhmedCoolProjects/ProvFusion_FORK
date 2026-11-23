@@ -20,7 +20,7 @@ class EdgeDataset(Dataset):
         return self.h_src[idx], self.h_dst[idx], self.y[idx]
 
 
-def link_prediction(train_feats, reverse_train_feats, val_feats, real_val_feats, graphs, num_classes, lr_f, weight_decay_f, max_epoch_f, device, weights=None):
+def link_prediction(train_feats, reverse_train_feats, val_feats, real_val_feats, graphs, num_classes, lr_f, weight_decay_f, max_epoch_f, device, weights=None, wandb_run=None):
     if weights is None:
         raise ValueError(
             "weights must be provided: pass a dataset-specific 11-element tensor "
@@ -98,6 +98,8 @@ def link_prediction(train_feats, reverse_train_feats, val_feats, real_val_feats,
             loss.backward()
             optimizer.step()
         epoch_iter.set_description(f"# Epoch: {epoch}, train_loss:{loss.item(): .4f}")
+        if wandb_run is not None:
+            wandb_run.log({"finetune/train_loss": loss.item()}, step=epoch)
 
     with torch.no_grad():
         model.eval()

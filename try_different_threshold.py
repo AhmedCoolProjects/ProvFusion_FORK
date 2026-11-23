@@ -2052,7 +2052,7 @@ def normalize_robust(baseline_data, test_data):
 # --- 【修改后】的主函数 ---
 # ==========================================================
 
-def method_12_with_different_normalization(filename, data, ground_truth, normalization_method='percentile'):
+def method_12_with_different_normalization(filename, data, ground_truth, normalization_method='percentile', wandb_run=None):
     """
     修改后的代码版本，确保每个节点（由uuid标识）在所有图中只被计数一次。
     
@@ -2396,7 +2396,18 @@ def method_12_with_different_normalization(filename, data, ground_truth, normali
             
             adp_score = plot_detected_attacks_vs_precision(scores, nodes, node2attacks, labels, f'{dataset_name}_attack_adp_detection.png')
             print('The adp score is:', adp_score)
+            if wandb_run is not None:
+                wandb_run.log({
+                    "eval/tp": total_final_TP, "eval/fp": total_final_FP,
+                    "eval/fn": total_final_FN, "eval/tn": total_final_TN,
+                    "eval/precision": precision, "eval/recall": recall,
+                    "eval/f1": f1, "eval/accuracy": accuracy,
+                    "eval/mcc": mcc, "eval/adp": adp_score,
+                })
             print("=" * 40 + "\n")
+            return {"tp": total_final_TP, "fp": total_final_FP, "fn": total_final_FN,
+                    "tn": total_final_TN, "precision": precision, "recall": recall,
+                    "f1": f1, "accuracy": accuracy, "mcc": mcc, "adp": adp_score}
 
 def main():
     parser = argparse.ArgumentParser(description='Evaluate anomaly detection results using method_12_with_different_normalization.')
@@ -2409,15 +2420,31 @@ def main():
     parser.add_argument('--normalization_method', type=str, default='percentile',
                         choices=['percentile', 'min_max', 'z_score', 'robust'],
                         help='Score normalization method (default: percentile)')
+    parser.add_argument('--wandb', action='store_true', default=False)
+    parser.add_argument('--wandb_project', type=str, default='ProvFusion')
+    parser.add_argument('--wandb_entity', type=str, default=None)
+    parser.add_argument('--wandb_run_name', type=str, default=None)
+    parser.add_argument('--wandb_group', type=str, default=None,
+                        help='optional W&B group name to cluster related runs')
+    parser.add_argument('--wandb_mode', type=str, default=None, choices=['online', 'offline', 'disabled'])
     args = parser.parse_args()
 
     print(f'============================Processing file:=====================\n{args.results_path}')
-    method_12_with_different_normalization(
-        args.results_path,
-        args.data_path,
-        args.ground_truth_path,
-        normalization_method=args.normalization_method,
-    )
+    wandb_run = None
+    if args.wandb:
+        from graphmae.wandb_utils import init_wandb, finish as finish_wandb
+        wandb_run = init_wandb(args, seed=0, suffix='eval')
+    try:
+        method_12_with_different_normalization(
+            args.results_path,
+            args.data_path,
+            args.ground_truth_path,
+            normalization_method=args.normalization_method,
+            wandb_run=wandb_run,
+        )
+    finally:
+        if args.wandb:
+            finish_wandb(wandb_run)
 
 
 if __name__ == '__main__':

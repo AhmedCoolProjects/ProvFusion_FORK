@@ -17,8 +17,8 @@ from graphmae.utils import (
     get_current_lr,
     load_best_configs,
 )
-from graphmae.datasets.data_util import load_dataset
 from graphmae.models import build_model
+from graphmae.wandb_utils import init_wandb, finish as finish_wandb
 from configs.dataset_weights import DATASET_WEIGHTS
 from link_prediction_evaluation import link_prediction
 from try_different_threshold import method_12_with_different_normalization
@@ -50,11 +50,13 @@ def knn_anomaly_detection(train_graphs, test_graphs, n_neighbors):
     return result
 
 
-def pretrain(model, reverse_graphs, train_graphs, node_map_ids, subgraph_edges, val_graphs, val_feats, optimizer, optimizer_whole_graph, max_epoch, device, scheduler, scheduler_whole_graph, num_classes, lr_f, weight_decay_f, max_epoch_f, linear_prob, logger=None, weights=None):
+def pretrain(model, reverse_graphs, train_graphs, node_map_ids, subgraph_edges, val_graphs, val_feats, optimizer, optimizer_whole_graph, max_epoch, device, scheduler, scheduler_whole_graph, num_classes, lr_f, weight_decay_f, max_epoch_f, linear_prob, logger=None, weights=None, wandb_run=None, wandb_prefix=""):
+    from graphmae.wandb_utils import log as _wblog
     logging.info("start training..")
     epoch_iter = tqdm(range(max_epoch))
     model.train()
     for epoch in epoch_iter:
+        epoch_loss, n_batches = 0.0, 0
         for gi, graph in enumerate(train_graphs):
             graph = graph.to(device)
             x = graph.ndata["feat"].to(device)
@@ -63,11 +65,14 @@ def pretrain(model, reverse_graphs, train_graphs, node_map_ids, subgraph_edges, 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            epoch_loss += loss.item()
+            n_batches += 1
 
             current_learning_rate = get_current_lr(optimizer)
             epoch_iter.set_description(
                 f"# Epoch {epoch}: train_loss: {loss.item():.4f}, LR: {current_learning_rate:.1e}"
             )
+        _wblog(wandb_run, {f"{wandb_prefix}train_loss": epoch_loss / max(n_batches, 1)}, step=epoch)
 
         if scheduler is not None:
             scheduler.step()
@@ -104,7 +109,7 @@ def get_malicious_ranks(malicious_node_ids, loss_dict, method='mean'):
     return malicious_ranks
 
 
-def train(args, graphs):
+def train(args, graphs, wandb_run=None, wandb_prefix=""):
     device = args.device if args.device >= 0 else "cpu"
     max_epoch = args.max_epoch
     max_epoch_f = args.max_epoch_f
@@ -132,7 +137,8 @@ def train(args, graphs):
     model.to(device)
     model = pretrain(model, None, graphs['train'], None, None, val_graphs,
                      val_xs, optimizer, None, max_epoch, device, scheduler, None,
-                     None, lr_f, weight_decay_f, max_epoch_f, linear_prob, None, None)
+                     None, lr_f, weight_decay_f, max_epoch_f, linear_prob, None, None,
+                     wandb_run=wandb_run, wandb_prefix=wandb_prefix)
     model = model.cpu()
     torch.cuda.empty_cache()
 
@@ -243,20 +249,19 @@ def main(args):
     args.num_features = num_features
     args.edge_in_dim = edge_features
     args.edge_feat_name = 'label'
-
     for i, seed in enumerate(seeds):
         print(f"####### Run {i} for seed {seed}")
         set_random_seed(seed)
-
+        wandb_run = init_wandb(args, seed, f"run{i}")
         if logs:
             logger = TBLogger(name=f"{dataset_name}_loss_{loss_fn}_rpr_{replace_rate}_nh_{num_hidden}_nl_{num_layers}_lr_{lr}_mp_{max_epoch}_mpf_{max_epoch_f}_wd_{weight_decay}_wdf_{weight_decay_f}_{encoder_type}_{decoder_type}")
         else:
             logger = None
 
         args.num_features = num_features
-        model_attribute = train(args, graphs_2)
+        model_attribute = train(args, graphs_2, wandb_run=wandb_run, wandb_prefix="attribute/")
         args.num_features = 3
-        model_pure_structure = train(args, graphs)
+        model_pure_structure = train(args, graphs, wandb_run=wandb_run, wandb_prefix="structure/")
 
         model_pure_structure = model_pure_structure.to(device)
         model_pure_structure.eval()
@@ -281,7 +286,8 @@ def main(args):
         torch.cuda.empty_cache()
         _, _, edge_test_loss, val_test_loss, out_pred, test_edges, val_edges = link_prediction(
             train_x_rep_attribute, reverse_graphs, test_x_rep_attribute, val_x_rep_attribute,
-            graphs_2, num_classes, lr_f, weight_decay_f, max_epoch_f, args.device, weights
+            graphs_2, num_classes, lr_f, weight_decay_f, max_epoch_f, args.device, weights,
+            wandb_run=wandb_run,
         )
         torch.cuda.empty_cache()
 
@@ -335,7 +341,8 @@ def main(args):
         torch.save(data, results_path)
 
         print(f"\n===== Evaluating with method_12_with_different_normalization (normalization={args.normalization_method}) =====")
-        method_12_with_different_normalization(results_path, args.data_path, args.ground_truth_path, normalization_method=args.normalization_method)
+        method_12_with_different_normalization(results_path, args.data_path, args.ground_truth_path, normalization_method=args.normalization_method, wandb_run=wandb_run)
+        finish_wandb(wandb_run)
 
 
 if __name__ == "__main__":

@@ -11,7 +11,6 @@ import dgl
 import torch
 import torch.nn as nn
 from torch import optim as optim
-from tensorboardX import SummaryWriter
 
 
 
@@ -102,6 +101,16 @@ def build_args():
     parser.add_argument("--logging", action="store_true")
     parser.add_argument("--scheduler", action="store_true", default=False)
     parser.add_argument("--concat_hidden", action="store_true", default=False)
+    # Weights & Biases experiment tracking (opt-in; off by default, no hard dependency)
+    parser.add_argument("--wandb", action="store_true", default=False,
+                        help="log this run to Weights & Biases")
+    parser.add_argument("--wandb_project", type=str, default="ProvFusion")
+    parser.add_argument("--wandb_entity", type=str, default=None)
+    parser.add_argument("--wandb_run_name", type=str, default=None)
+    parser.add_argument("--wandb_group", type=str, default=None,
+                        help="optional W&B group name to cluster related runs")
+    parser.add_argument("--wandb_mode", type=str, default=None, choices=["online", "offline", "disabled"],
+                        help="wandb mode; default honors the WANDB_MODE env var (use 'offline' for no-network runs)")
 
     # for graph classification
     parser.add_argument("--pooling", type=str, default="mean")
@@ -231,6 +240,10 @@ class TBLogger(object):
             name = raw_name + str(f"_{i}")
             if not os.path.exists(name):
                 break
+        try:
+            from tensorboardX import SummaryWriter
+        except ImportError as exc:
+            raise ImportError("tensorboardX is not installed; run `pip install tensorboardX` or drop --logging") from exc
         self.writer = SummaryWriter(logdir=name)
 
     def note(self, metrics, step=None):
